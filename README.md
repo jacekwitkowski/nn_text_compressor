@@ -25,10 +25,10 @@ python .\nn_text_compressor.py --mode compress --trained_model MODELLO.nn --infi
 
 Decopression with 
 
-python .\nn_text_compressor.py --mode decompress --trained_model MODELLO.nn --infile compressed_file.comp --outfile input_test_file_after_decompression.txt
+python .\nn_text_compressor.py --mode decompress --trained_model .\MODELLO.nn --infile compressed_file.comp --outfile decompressed.txt
 
 
 If all works well it should be 
-input_test_file.txt == input_test_file_after_decompression.txt
+input_test_file.txt == decompressed.txt
 
 

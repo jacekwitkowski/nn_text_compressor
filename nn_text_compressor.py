@@ -28,7 +28,7 @@ from bitInputStream import BitInputStream
 
 #################################################################
 # Configuration 
-NUMBER_OF_EPOCHS = 3 # Number of training epochs the more the better but lookout for overtrining problem
+NUMBER_OF_EPOCHS = 10 # Number of training epochs the more the better but lookout for overtrining problem
 
 
 
@@ -150,7 +150,7 @@ def compress_file(model, infile, outfile):
                 logits, hidden = model(x, hidden)
                 probs = torch.softmax(logits[0, -1].float(), dim=0)
                 cum = helpers.probs_to_cumfreq(probs, total=total)
-            print("Encoding byte:", b, "with cumulative freq:", cum)    
+            #print("Encoding byte:", b, "with cumulative freq:", cum)    
             enc.update(cum, b)
             if len(context) == 0:
                 context = [b]

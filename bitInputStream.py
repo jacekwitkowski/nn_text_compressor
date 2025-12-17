@@ -12,8 +12,8 @@ class BitInputStream:
                 return None
             self.acc = b[0]
             self.nbits = 8
-            self.nbits -= 1
-            return (self.acc >> self.nbits) & 1
+        self.nbits -= 1
+        return (self.acc >> self.nbits) & 1
 
 
     def read_bits(self, n):
