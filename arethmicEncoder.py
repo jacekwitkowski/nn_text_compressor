@@ -1,3 +1,6 @@
+from bitOutputStream import BitOutputStream
+
+
 class ArithmeticEncoder:
     def __init__(self, bout: BitOutputStream):
         self.bout = bout

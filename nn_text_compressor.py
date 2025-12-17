@@ -129,7 +129,7 @@ def compress_file(model, infile, outfile):
     data_bytes = list(data)
 
     with open(outfile, 'wb') as f_out:
-        f_out.write(struct.pack('NN', len(data_bytes)))  # Store original length
+        f_out.write(struct.pack('>Q', len(data_bytes)))  # Store original length
         bout = BitOutputStream(f_out)
         enc = ArithmeticEncoder(bout)
 
@@ -146,17 +146,18 @@ def compress_file(model, infile, outfile):
             if i == 0:
                 cum = uniform_cum
             else:
-                x = torch.tensor([context], dtype=torch.long).to('cpu') if len(context)> 0 else torch.tensor([[0]], dtype=torch.long)
+                x = torch.tensor([context], dtype=torch.long, device='cpu') if len(context) > 0 else torch.tensor([[0]], dtype=torch.long, device='cpu')
                 logits, hidden = model(x, hidden)
-                probs = torch.softmax(logits[0, -1], dim=0).detach().cpu().numpy()
-                cum = helpers.probs_to_cumfreq(probs, total)
+                probs = torch.softmax(logits[0, -1].float(), dim=0)
+                cum = helpers.probs_to_cumfreq(probs, total=total)
+            print("Encoding byte:", b, "with cumulative freq:", cum)    
             enc.update(cum, b)
-
             if len(context) == 0:
                 context = [b]
             else:
                 context = [b]
         enc.finish()
+
 
 @torch.no_grad()
 def decompress_file(model, infile, outfile):
@@ -165,7 +166,7 @@ def decompress_file(model, infile, outfile):
         original_len_bytes = f_in.read(8)
         if len(original_len_bytes) < 8:
             raise ValueError("Invalid compressed file format.")
-        original_len = struct.unpack('NN', original_len_bytes)[0]
+        original_len = struct.unpack('>Q', original_len_bytes)[0]
         binp = BitInputStream(f_in)
         dec = ArithmeticDecoder(binp)
 
