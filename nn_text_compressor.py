@@ -11,15 +11,24 @@
 import argparse
 import os
 import math
+import struct
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm   
 
+import helpers
+
+import arethmicEncoder
+from arethmicEncoder import ArithmeticEncoder
+import arethmicsDecoder
+from arethmicsDecoder import ArithmeticDecoder
+from bitOutputStream import BitOutputStream
+from bitInputStream import BitInputStream
 
 #################################################################
 # Configuration 
-NUMBER_OF_EPOCHS = 100 
+NUMBER_OF_EPOCHS = 3 # Number of training epochs the more the better but lookout for overtrining problem
 
 
 
@@ -112,6 +121,80 @@ def train_model(train_files, trained_model_path, liczbaEpok=NUMBER_OF_EPOCHS, ba
     else:
         print("No path provided for saving the trained model.")
 
+@torch.no_grad()
+def compress_file(model, infile, outfile):
+    model.eval()
+    with open(infile, 'rb') as f_in:
+        data = f_in.read()
+    data_bytes = list(data)
+
+    with open(outfile, 'wb') as f_out:
+        f_out.write(struct.pack('NN', len(data_bytes)))  # Store original length
+        bout = BitOutputStream(f_out)
+        enc = ArithmeticEncoder(bout)
+
+        hidden = None
+        context = []
+
+        total = 1 << 16
+        uniform_cum = list(range(0,total + 1, total // 256))
+        if len(uniform_cum) != 257:
+            uniform_cum = [i * (total // 256) for i in range(257)]
+            uniform_cum[-1] = total
+
+        for i, b in enumerate(tqdm(data_bytes, desc="Compressing")):
+            if i == 0:
+                cum = uniform_cum
+            else:
+                x = torch.tensor([context], dtype=torch.long).to('cpu') if len(context)> 0 else torch.tensor([[0]], dtype=torch.long)
+                logits, hidden = model(x, hidden)
+                probs = torch.softmax(logits[0, -1], dim=0).detach().cpu().numpy()
+                cum = helpers.probs_to_cumfreq(probs, total)
+            enc.update(cum, b)
+
+            if len(context) == 0:
+                context = [b]
+            else:
+                context = [b]
+        enc.finish()
+
+@torch.no_grad()
+def decompress_file(model, infile, outfile):
+    model.eval()
+    with open(infile, 'rb') as f_in:
+        original_len_bytes = f_in.read(8)
+        if len(original_len_bytes) < 8:
+            raise ValueError("Invalid compressed file format.")
+        original_len = struct.unpack('NN', original_len_bytes)[0]
+        binp = BitInputStream(f_in)
+        dec = ArithmeticDecoder(binp)
+
+        hidden = None
+        context = []
+        decompressed_bytes = bytearray()
+        total = 1 << 16
+        uniform_cum = list(range(0,total + 1, total // 256))
+        if len(uniform_cum) != 257:
+            uniform_cum = [i * (total // 256) for i in range(257)]
+            uniform_cum[-1] = total
+
+        for i in tqdm(range(original_len), desc="Decompressing"):
+            if i == 0:
+                cum = uniform_cum
+            else:
+                x = torch.tensor([context], dtype=torch.long).to('cpu') if len(context) > 0 else torch.tensor([[0]], dtype=torch.long)
+                logits, hidden = model(x, hidden)
+                probs = torch.softmax(logits[0, -1], dim=0).detach().cpu().numpy()
+                cum = helpers.probs_to_cumfreq(probs, total)
+            sym = dec.get_symbol(cum)
+            decompressed_bytes.append(sym)
+
+            context = [sym]
+        
+        with open(outfile, 'wb') as f_out:
+            f_out.write(decompressed_bytes)
+
+            
 
 def main():
     arguments = argparse.ArgumentParser(description="Neural Network Text Compressor")
@@ -129,20 +212,33 @@ def main():
             print("Usage: python3 nn_text_compressor.py --mode train --train_files file1.txt file2.txt\n")
             return
         train_model(args.train_files, args.trained_model)
+
+
+
     elif args.mode == "compress":
         if not args.infile or not args.outfile:
             print("Input and output files are required for compression mode.\n")
             print("Usage: python3 nn_text_compressor.py --mode compress --infile input.txt --outfile output.bin\n")
             return
-        # Placeholder for compression logic
-        print(f"Compressing {args.infile} to {args.outfile} (not implemented yet).")
+        
+        model = LSTMModel()
+        model.load_state_dict(torch.load(args.trained_model))
+        model.to("cpu")
+        compress_file(model, args.infile, args.outfile)
+        print(f"Compressed {args.infile} to {args.outfile}")
+
+
     elif args.mode == "decompress":
         if not args.infile or not args.outfile:
             print("Input and output files are required for decompression mode.\n")
             print("Usage: python3 nn_text_compressor.py --mode decompress --infile input.bin --outfile output.txt\n")
             return
-        # Placeholder for decompression logic
-        print(f"Decompressing {args.infile} to {args.outfile} (not implemented yet).")
+        model = LSTMModel()
+        model.load_state_dict(torch.load(args.trained_model))
+        model.to("cpu")
+        decompress_file(model, args.infile, args.outfile)
+        print(f"Decompressed {args.infile} to {args.outfile}")
+        
     else:
         print("Invalid mode. Valid modes are: train, compress, decompress.\n")
         print("Usage: python3 nn_text_compressor.py --mode [train|compress|decompress]\n")
