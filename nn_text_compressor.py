@@ -28,7 +28,7 @@ from bitInputStream import BitInputStream
 
 #################################################################
 # Configuration 
-NUMBER_OF_EPOCHS = 10 # Number of training epochs the more the better but lookout for overtrining problem
+NUMBER_OF_EPOCHS = 1000 # Number of training epochs the more the better but lookout for overtrining problem
 
 
 
